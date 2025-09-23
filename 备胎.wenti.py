@@ -17,7 +17,6 @@ class MA5Strategy:
         log.info('初始函数开始运行且全局只运行一次')
         # 初始化时不指定固定股票，改为动态获取
         log.info("策略初始化完成，将在每日开盘前获取全市场股票列表")
-        log.info("策略规则：每日最多买入3只股票，达到数量后停止当日买入")
 
     def before_market_open(self, date):
         """开盘前运行：获取当日所有可交易股票"""
@@ -33,38 +32,13 @@ class MA5Strategy:
                 self.g.previous_prices[stock] = None
 
     def market_open(self, date):
-        """开盘时运行：遍历所有股票执行交易逻辑，每日最多买入3只"""
+        """开盘时运行：遍历所有股票执行交易逻辑"""
         log.info(f'函数运行时间(market_open)：{str(date)}')
-        security = self.g.security
-        from Data_Handling import get_price
-        # 获取当前价格（当日收盘价）
-        current_data = get_price(security, count=1, fields=['Clsprc'], end_date=date)
-        if len(current_data) == 0:
-            log.info(f'无法获取当前价格数据，跳过交易：{date}')
-            return
-        current_price = current_data['Clsprc'].iloc[-1]
-
-        # 获取上一个有效交易日的价格（核心修改）
-        data_handler = self.context['data_handler']
-        previous_trading_day = data_handler.get_previous_trading_day(date)
-        previous_price = None
-        if previous_trading_day:
-            prev_data = get_price(security, count=1, fields=['Clsprc'], end_date=previous_trading_day)
-            if len(prev_data) > 0:
-                previous_price = prev_data['Clsprc'].iloc[-1]
-        self.g.previous_price = previous_price  # 更新为上一交易日价格
         account = self.context['account']
         cash = self.context['portfolio']['available_cash']
-        daily_buy_count = 0  # 当日买入计数器
-        max_daily_buys = 3   # 每日最大买入数量限制
 
         # 遍历当日所有可交易股票
         for stock in self.g.stock_pool:
-            # 若已达到每日最大买入数量，停止后续买入操作
-            if daily_buy_count >= max_daily_buys:
-                log.info(f"已达到当日最大买入数量({max_daily_buys}只)，停止今日买入操作")
-                break
-
             # 获取当前股票的最新价格
             current_data = get_price(stock, count=1, fields=['Clsprc'], end_date=date)
             if len(current_data) == 0:
@@ -88,10 +62,8 @@ class MA5Strategy:
                             success = account.buy(date, stock, current_price, buy_amount)
                             if success:
                                 log.info(f"🎯 买入 {stock}，价格：{current_price:.2f}，数量：{buy_amount}")
-                                # 更新可用现金和买入计数器
-                                cash = account.cash  # 实时更新现金
-                                daily_buy_count += 1  # 增加买入计数
-                                log.info(f"当日已买入 {daily_buy_count}/{max_daily_buys} 只股票")
+                                # 更新可用现金
+                                cash = account.cash  # 实时更新现金，避免重复计算
                             else:
                                 log.info(f"买入 {stock} 失败")
                     else:

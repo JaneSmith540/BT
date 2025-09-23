@@ -5,6 +5,8 @@ import numpy as np
 import matplotlib.pyplot as plt
 import pandas as pd
 import numpy as np
+
+from Performance_Analysis import PerformanceAnalysis
 from Visualization import BacktestVisualization  # 导入新的可视化类
 
 
@@ -167,19 +169,17 @@ class BacktestEngine:
                 self.account.calculate_total_assets(date, {security: np.nan})
 
         print("回测完成!")
-        self.calculate_returns()
+        # 初始化性能分析模块（替代原有的self.calculate_returns()）
+        self.performance = PerformanceAnalysis(self.account)
 
-        # 创建可视化实例
-        self.visualization = BacktestVisualization(self.account, self.strategy_returns)
+        # 可视化模块改用性能分析的结果
+        self.visualization = BacktestVisualization(
+            self.account,
+            self.performance.strategy_returns  # 从性能分析获取收益率
+        )
 
         # 显示结果
         self.visualization.plot_results()
-        self.visualization.print_performance()
-
-    def calculate_returns(self):
-        """计算策略收益率"""
-        self.strategy_returns = pd.Series(
-            self.account.total_assets, index=self.account.dates
-        ).pct_change().fillna(0)
+        self.visualization.print_performance()  # 可视化模块将调用性能分析的指标
 
 

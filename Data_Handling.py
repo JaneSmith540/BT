@@ -111,10 +111,44 @@ def get_price(security, start_date=None, end_date=None, frequency='daily', field
     return df
 
 
+# 在Data_Handling.py中添加以下函数（可放在get_price函数之后）
+def get_all_securities(date=None):
+
+    if not os.path.exists(file_path):
+        raise FileNotFoundError(f"数据文件不存在: {file_path}")
+
+    # 读取CSV文件
+    df = pd.read_csv(file_path, dtype=str)
+
+    # 处理日期列
+    if 'Trddt' in df.columns:
+        df['Trddt'] = pd.to_datetime(df['Trddt'].str.replace('"', ''))
+
+    # 处理股票代码
+    if 'Stkcd' in df.columns:
+        df['Stkcd'] = df['Stkcd'].str.replace('"', '').str.zfill(6)  # 统一6位代码格式
+
+    # 按日期筛选
+    if date is not None:
+        target_date = pd.to_datetime(date)
+        df = df[df['Trddt'] == target_date]
+
+    # 去重并返回股票代码列表
+    return df['Stkcd'].dropna().unique().tolist()
 class DataHandler:
     def __init__(self, file_path):
         self.file_path = file_path
-        self.stock_data = self._load_data()  # 加载所有股票数据
+        self.stock_data = self._load_data()
+        self.dates = pd.DatetimeIndex(self.stock_data.index.unique(level=0)).sort_values()
+
+    def get_previous_trading_day(self, current_date):
+        """获取当前日期的上一个有效交易日"""
+        current_date = pd.to_datetime(current_date)
+        # 获取所有小于当前日期的交易日并排序
+        previous_days = self.dates[self.dates < current_date]
+        if len(previous_days) == 0:
+            return None  # 没有上一个交易日
+        return previous_days[-1]  # 返回最近的一个交易日
 
     def _load_data(self):
         """加载并预处理CSV数据"""
