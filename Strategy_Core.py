@@ -12,20 +12,22 @@ class MA5Strategy:
     def initialize(self):
         """初始化策略"""
         log.info('初始函数开始运行且全局只运行一次')
-        self.g.security = '000002'  # 使用数字格式的股票代码
+        self.g.security = '000001'  # 使用数字格式的股票代码
         self.context['security'] = self.g.security
         self.g.previous_price = None  # 用于存储前一天的收盘价
 
+        # 添加用户日志信息
+        log.info("策略初始化完成，将在每日开盘前获取全市场股票列表")
+        log.info("策略规则：每日最多买入3只股票，达到数量后停止当日买入")
 
     def before_market_open(self, date):
         """开盘前运行"""
-        log.info(f'函数运行时间(before_market_open)：{str(date)}')
 
 
     def market_open(self, date):
         """开盘时运行"""
         log.info(f'函数运行时间(market_open)：{str(date)}')
-        security = self.g.security
+        security = self.g.security  # 现在这里不会再报错了
 
         # 调用DataHandler的get_price获取当前价格
         from Data_Handling import get_price
@@ -48,44 +50,66 @@ class MA5Strategy:
         if self.g.previous_price is not None:
             # 今日股价比昨日高则买入
             if current_price > self.g.previous_price:
-                # 如果有现金，则买入
-                if cash > 0:
-                    # 计算可买数量（考虑手续费）
-                    buy_amount = self.calculate_buy_amount(cash, current_price)
-                    if buy_amount > 0:
-                        success = account.buy(date, security, current_price, buy_amount)
-                        if success:
-                            log.info(f"🎯 买入信号触发！买入 {security}，价格：{current_price:.2f}，数量：{buy_amount}")
-                            # 更新现金信息
-                            self.context['portfolio']['available_cash'] = account.cash
-                        else:
-                            log.info(f"买入失败，可能由于现金不足")
-                    else:
-                        log.info(f"计算出的买入数量为0，跳过买入")
-                else:
-                    log.info(f"今日价格高于昨日，但现金不足，无法买入")
-
+                # 调用交易函数执行买入
+                self.trading_function(
+                    date=date,
+                    security=security,
+                    action='buy',
+                    price=current_price,
+                    cash=cash,
+                    account=account
+                )
             # 否则卖出（今日股价不高于昨日）
             else:
-                # 检查是否有持仓
-                has_position = security in account.positions and account.positions[security] > 0
-                log.info(
-                    f"检查持仓: {security} 在持仓中: {security in account.positions}, 持仓数量: {account.positions.get(security, 0)}")
-
-                if has_position:
-                    sell_amount = account.positions[security]  # 卖出全部持仓
-                    success = account.sell(date, security, current_price, sell_amount)
-                    if success:
-                        log.info(f"📉 卖出信号触发！卖出 {security}，价格：{current_price:.2f}，数量：{sell_amount}")
-                    else:
-                        log.info(f"卖出失败")
-                else:
-                    log.info(f"今日价格不高于昨日，但无持仓可卖，跳过交易")
+                # 调用交易函数执行卖出
+                self.trading_function(
+                    date=date,
+                    security=security,
+                    action='sell',
+                    price=current_price,
+                    cash=cash,
+                    account=account
+                )
         else:
             log.info(f'没有前一天价格数据，跳过交易：{date}')
 
         # 更新前一天价格为今天的价格（供明天使用）
         self.g.previous_price = current_price
+
+    def trading_function(self, date, security, action, price, cash, account):
+        """统一处理买入卖出的交易函数"""
+        if action == 'buy':
+            if cash > 0:
+                # 计算可买数量（考虑手续费）
+                buy_amount = self.calculate_buy_amount(cash, price)
+                if buy_amount > 0:
+                    success = account.buy(date, security, price, buy_amount)
+                    if success:
+                        log.info(f"🎯 买入信号触发！买入 {security}，价格：{price:.2f}，数量：{buy_amount}")
+                        # 更新现金信息
+                        self.context['portfolio']['available_cash'] = account.cash
+                    else:
+                        log.info(f"买入失败，可能由于现金不足")
+                else:
+                    log.info(f"计算出的买入数量为0，跳过买入")
+            else:
+                log.info(f"今日价格高于昨日，但现金不足，无法买入")
+
+        elif action == 'sell':
+            # 检查是否有持仓
+            has_position = security in account.positions and account.positions[security] > 0
+            log.info(
+                f"检查持仓: {security} 在持仓中: {security in account.positions}, 持仓数量: {account.positions.get(security, 0)}")
+
+            if has_position:
+                sell_amount = account.positions[security]  # 卖出全部持仓
+                success = account.sell(date, security, price, sell_amount)
+                if success:
+                    log.info(f"📉 卖出信号触发！卖出 {security}，价格：{price:.2f}，数量：{sell_amount}")
+                else:
+                    log.info(f"卖出失败")
+            else:
+                log.info(f"今日价格不高于昨日，但无持仓可卖，跳过交易")
 
     def calculate_buy_amount(self, cash, price):
         """计算可买入数量（考虑手续费）"""
