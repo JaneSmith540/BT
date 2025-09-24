@@ -12,24 +12,20 @@ class MA5Strategy:
     def initialize(self):
         """初始化策略"""
         log.info('初始函数开始运行且全局只运行一次')
-        self.g.security = '000001'  # 使用数字格式的股票代码
+        self.g.security = '000002'  # 使用数字格式的股票代码
         self.context['security'] = self.g.security
         self.g.previous_price = None  # 用于存储前一天的收盘价
 
-        # 添加用户日志信息
-        log.info("策略初始化完成，将在每日开盘前获取全市场股票列表")
-        log.info("策略规则：每日最多买入3只股票，达到数量后停止当日买入")
 
     def before_market_open(self, date):
         """开盘前运行"""
         log.info(f'函数运行时间(before_market_open)：{str(date)}')
-        # 添加模拟获取可交易股票数量的日志
-        log.info(f"当日可交易股票数量: 5495")
+
 
     def market_open(self, date):
         """开盘时运行"""
         log.info(f'函数运行时间(market_open)：{str(date)}')
-        security = self.g.security  # 现在这里不会再报错了
+        security = self.g.security
 
         # 调用DataHandler的get_price获取当前价格
         from Data_Handling import get_price

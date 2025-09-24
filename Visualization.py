@@ -79,7 +79,3 @@ class BacktestVisualization:
             print(f"\n交易统计:")
             print(f"买入次数: {len(buy_trades)}")
             print(f"卖出次数: {len(sell_trades)}")
-
-            if not sell_trades.empty:
-                avg_profit = (sell_trades['revenue'] - sell_trades['price'] * sell_trades['amount']).mean()
-                print(f"平均每次卖出收益: {avg_profit:.2f}元")

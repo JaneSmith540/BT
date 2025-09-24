@@ -1,13 +1,8 @@
 import matplotlib.pyplot as plt
 import pandas as pd
 import numpy as np
-# 账户
-import matplotlib.pyplot as plt
-import pandas as pd
-import numpy as np
-
 from Performance_Analysis import PerformanceAnalysis
-from Visualization import BacktestVisualization  # 导入新的可视化类
+from Visualization import BacktestVisualization
 
 
 # 账户类
@@ -20,7 +15,6 @@ class Account:
         self.trade_history = []  # 交易历史
         self.total_assets = []  # 每日总资产记录
         self.dates = []  # 日期记录
-
 
     def buy(self, date, stock_code, price, amount):
         """买入股票"""
@@ -87,99 +81,104 @@ class Account:
         self.dates.append(date)
         return total
 
+
 # 回测引擎类
 class BacktestEngine:
-    def __init__(self, data_handler, strategy_class, initial_cash=100000):
+    def __init__(self, data_handler, strategy_class, initial_cash=100000, max_stock_holdings=None):
+        """
+        初始化回测引擎
+        :param data_handler: 数据处理器
+        :param strategy_class: 策略类
+        :param initial_cash: 初始资金
+        :param max_stock_holdings: 最大持股数量限制（None表示无限制）
+        """
         self.data_handler = data_handler
         self.strategy_class = strategy_class
         self.account = Account(initial_cash)
+        self.max_stock_holdings = max_stock_holdings  # 新增：最大持股数量限制
 
         stock_data = self.data_handler.get_stock_data()
-        # 先获取唯一日期的 Series，再转换为 DatetimeIndex
         unique_dates = stock_data.index.unique()
-        self.dates = pd.DatetimeIndex(unique_dates).sort_values()  # 排序后的 DatetimeIndex
+        self.dates = pd.DatetimeIndex(unique_dates).sort_values()
 
         self.benchmark_returns = None
         self.strategy_returns = None
 
-        # 初始化上下文（其余代码不变）
+        # 初始化上下文，加入最大持股限制
         self.context = {
             'account': self.account,
             'data_handler': data_handler,
             'current_dt': None,
             'portfolio': {
                 'available_cash': self.account.cash,
-                'positions': self.account.positions
+                'positions': self.account.positions,
+                'max_stock_holdings': self.max_stock_holdings  # 新增：将限制加入上下文
             }
         }
 
         self.strategy = self.strategy_class(self.context)
 
+    def check_holding_limit(self):
+        """检查是否达到最大持股数量限制"""
+        if self.max_stock_holdings is None:
+            return True  # 无限制时返回True表示可以买入
+        # 当前持股数量小于等于最大限制时返回True
+        return len(self.account.positions) < self.max_stock_holdings
+
     def run(self, start_date=None, end_date=None):
         """运行回测"""
-        # 打印原始日期范围
         print(f"原始数据日期范围: {self.dates.min()} 至 {self.dates.max()}")
 
-        # 筛选回测日期范围
         if start_date and end_date:
             start_date = pd.to_datetime(start_date)
             end_date = pd.to_datetime(end_date)
             mask = (self.dates >= start_date) & (self.dates <= end_date)
             trade_dates = self.dates[mask]
-            # 打印筛选后的日期范围
             print(f"筛选后日期范围: {start_date} 至 {end_date}")
             print(f"有效交易日数量: {len(trade_dates)}")
         else:
             trade_dates = self.dates
 
-        # 新增：检查筛选后是否有有效日期
         if len(trade_dates) == 0:
             raise ValueError("没有找到符合条件的交易日期，请检查日期范围是否在数据范围内")
 
-        # 初始化策略
+        # 打印最大持股限制信息
+        if self.max_stock_holdings:
+            print(f"启用最大持股数量限制: {self.max_stock_holdings}只")
+        else:
+            print("未设置最大持股数量限制")
+
         self.strategy.initialize()
 
-        # 开始回测（后续代码不变）
         print(f"回测开始: {trade_dates[0].strftime('%Y-%m-%d')}")
         print(f"回测结束: {trade_dates[-1].strftime('%Y-%m-%d')}")
 
         for date in trade_dates:
             self.context['current_dt'] = date
             self.context['portfolio']['available_cash'] = self.account.cash
+            # 更新当前持股数量到上下文
+            self.context['portfolio']['current_holdings_count'] = len(self.account.positions)
 
-            # 每日交易前
             self.strategy.before_market_open(date)
-
-            # 每日交易
             self.strategy.market_open(date)
-
-            # 每日交易后
             self.strategy.after_market_close(date)
 
-            # 计算当日资产
             daily_stock_data = self.data_handler.get_single_day_data(date)
-            security = self.context['security']
+            security = self.context.get('security')  # 使用get避免键不存在错误
 
-            # 检查目标股票是否在当日数据中
-            if security in daily_stock_data:
+            if security and security in daily_stock_data:
                 stock_price = daily_stock_data[security]
                 self.account.calculate_total_assets(date, {security: stock_price})
             else:
-                # 如果目标股票不在当日数据中，则使用 NaN 作为价格
-                self.account.calculate_total_assets(date, {security: np.nan})
+                self.account.calculate_total_assets(date, {})
 
         print("回测完成!")
-        # 初始化性能分析模块（替代原有的self.calculate_returns()）
         self.performance = PerformanceAnalysis(self.account)
 
-        # 可视化模块改用性能分析的结果
         self.visualization = BacktestVisualization(
             self.account,
-            self.performance.strategy_returns  # 从性能分析获取收益率
+            self.performance.strategy_returns
         )
 
-        # 显示结果
         self.visualization.plot_results()
-        self.visualization.print_performance()  # 可视化模块将调用性能分析的指标
-
-
+        self.visualization.print_performance()
